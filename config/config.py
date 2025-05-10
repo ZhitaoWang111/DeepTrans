@@ -1,0 +1,1 @@
+hairlab_data = 'D:/wzt/bishe_data/data/HUST_data_cycle'
