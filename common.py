@@ -19,6 +19,7 @@ from torch import nn
 from torch.autograd import Variable
 from torch.utils.data import DataLoader, Dataset, Sampler, TensorDataset
 from torch.utils.data.sampler import RandomSampler
+from torch.utils.tensorboard import SummaryWriter
 
 from config import config
     
@@ -151,6 +152,7 @@ class Trainer():
         self.model_name = model_name
         self.lamda = lamda
         self.alpha = alpha
+        self.writer = SummaryWriter(log_dir='./ckpt/HUST/runs/pre-training')
 
     def train(self, train_loader, valid_loader, model):
         model = model.to(self.device)
@@ -200,6 +202,9 @@ class Trainer():
             
             losses = np.mean(losses)
             total_loss.append(losses)
+
+            self.writer.add_scalar('train_Loss', losses, epoch)
+            self.writer.add_scalar('train_mse_Loss', epoch_loss, epoch)
             
             # validate
             model.eval()
@@ -217,6 +222,8 @@ class Trainer():
             y_pred = torch.cat(y_pred, axis=0)
             epoch_loss = mean_squared_error(y_true.cpu().detach().numpy(), y_pred.cpu().detach().numpy())
             valid_loss.append(epoch_loss)
+
+            self.writer.add_scalar('valid_mse_Loss', epoch_loss, epoch)
             
             if self.n_epochs > 100:
                 if (epoch % 100 == 0 and epoch !=0):
@@ -280,6 +287,7 @@ class FineTrainer():
         self.lamda = lamda
         self.train_alpha = train_alpha
         self.valid_alpha = valid_alpha
+        self.writer = SummaryWriter(log_dir='./ckpt/HUST/runs/fune-tuning')
 
     def train(self, train_loader, valid_loader, model):
         model = model.to(self.device)
@@ -333,6 +341,9 @@ class FineTrainer():
             losses = np.mean(losses)
             total_loss.append(losses)
 
+            self.writer.add_scalar('train_Loss', losses, epoch)
+            self.writer.add_scalar('train_mse_Loss', epoch_loss, epoch)
+
             # validate
             model.eval()
             y_true, y_pred, all_true, all_pred = [], [], [], []
@@ -354,6 +365,8 @@ class FineTrainer():
             all_pred = torch.cat(all_pred, axis=0)
             epoch_loss = mean_squared_error(y_true.cpu().detach().numpy(), y_pred.cpu().detach().numpy())
             valid_loss.append(epoch_loss)
+
+            self.writer.add_scalar('valid_mse_Loss', epoch_loss, epoch)
             
             temp = 0
             for i in range(all_true.shape[1]):

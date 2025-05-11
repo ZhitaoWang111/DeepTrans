@@ -147,10 +147,10 @@ device = 'cuda'
 model = CRNN(100,4,64,64)
 model = model.to(device)
 
-num_epochs = 2000
+num_epochs = 200
 
 trainer = Trainer(lr = 8e-4, n_epochs = num_epochs,device = device, patience = 1200,
-                  lamda = lamda, alpha = alpha, model_name='./HAIRLAB/ckpt/HUST/wx_inner_pretrain')
+                  lamda = lamda, alpha = alpha, model_name='./ckpt/HUST/wx_inner_pretrain')
 model ,train_loss, valid_loss, total_loss = trainer.train(train_loader, valid_loader, model)
 
 print(f'pretrain_time:{time.time()-tic}')
@@ -164,8 +164,8 @@ train_alpha = torch.Tensor(train_weight9 + [0.] )
 valid_alpha = torch.Tensor(valid_weight9 + [0.])
 device = 'cuda'
 
-pretrain_model_path = './HAIRLAB/ckpt/HUST/wx_inner_pretrain_end.pt'
-finetune_model_path = './HAIRLAB/ckpt/HUST/wx_inner_finetune'
+pretrain_model_path = './ckpt/HUST/wx_inner_pretrain_end.pt'
+finetune_model_path = './ckpt/HUST/wx_inner_finetune'
 
 res_dict = {}
 
@@ -245,7 +245,7 @@ for name in new_test[:]:
         },
                           }})
     
-save_obj(res_dict,'./HAIRLAB/result/res_dict')
+save_obj(res_dict,'./result/res_dict')
 
 
 print('no problem')
