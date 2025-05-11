@@ -3,6 +3,7 @@ import time
 import pickle
 import math
 import random
+from tqdm import tqdm
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.pyplot import MultipleLocator
@@ -76,17 +77,17 @@ with open(loader_path, 'rb') as file:
 
 ### data loader ###
 
-# new_valid = ['4-3', '5-7', '3-3', '2-3', '9-3', '10-5', '3-2', '3-7']
-# new_train = ['9-1', '2-2', '4-7','9-7', '1-8','4-6','2-7','8-4', '7-2','10-3', '2-4', '7-4', '3-4',
-#             '5-4', '8-7','7-7', '4-4','1-3', '7-1','5-2', '6-4', '9-8','9-5','6-3','10-8','1-6','3-5',
-#              '2-6', '3-8', '3-6', '4-8', '7-8','5-1', '2-8', '8-2','1-5','7-3', '10-2','5-5', '9-2','5-6', '1-7', 
-#              '8-3', '4-1','4-2','1-4','6-5', ]
-# new_test  = ['9-6','4-5','1-2', '10-7','1-1', '6-1','6-6', '9-4','10-4','8-5', '5-3','10-6',
-#             '2-5','6-2','3-1','8-8', '8-1','8-6','7-6','6-8','7-5','10-1']
+new_valid = ['4-3', '5-7', '3-3', '2-3', '9-3', '10-5', '3-2', '3-7']
+new_train = ['9-1', '2-2', '4-7','9-7', '1-8','4-6','2-7','8-4', '7-2','10-3', '2-4', '7-4', '3-4',
+            '5-4', '8-7','7-7', '4-4','1-3', '7-1','5-2', '6-4', '9-8','9-5','6-3','10-8','1-6','3-5',
+             '2-6', '3-8', '3-6', '4-8', '7-8','5-1', '2-8', '8-2','1-5','7-3', '10-2','5-5', '9-2','5-6', '1-7', 
+             '8-3', '4-1','4-2','1-4','6-5', ]
+new_test  = ['9-6','4-5','1-2', '10-7','1-1', '6-1','6-6', '9-4','10-4','8-5', '5-3','10-6',
+            '2-5','6-2','3-1','8-8', '8-1','8-6','7-6','6-8','7-5','10-1']
 
-new_valid = ['4-3', '5-7',]
-new_train = ['9-1', '2-2', '4-7','9-7', '1-8','4-6', ]
-new_test  = ['9-6','4-5','1-2', '10-7',]
+# new_valid = ['4-3', '5-7',]
+# new_train = ['9-1', '2-2', '4-7','9-7', '1-8','4-6', ]
+# new_test  = ['9-6','4-5','1-2', '10-7',]
 
 stride = 10
 train_fea, train_lbl = [], []
@@ -135,20 +136,18 @@ train_loader_t = DataLoader(trainset, batch_size=batch_size,shuffle=False)
 '''
 lamda (float): The weight of RUL loss
 alpha (List: [float]): The weights of Capacity loss
-'''         
+'''      
+
 lamda = 1e-2
 alpha = torch.Tensor([0.1] * 10 )
 
-'''
-model training 
-'''
 tic = time.time()
 seed_torch(0)
 device = 'cuda'
 model = CRNN(100,4,64,64)
 model = model.to(device)
 
-num_epochs = 200
+num_epochs = 2000
 
 trainer = Trainer(lr = 8e-4, n_epochs = num_epochs,device = device, patience = 1200,
                   lamda = lamda, alpha = alpha, model_name='./HAIRLAB/ckpt/HUST/wx_inner_pretrain')
@@ -184,7 +183,9 @@ for name in new_test[:]:
 
     batch_size = 20 if len(test_fea)%20!=1 else 21
     rul_true, rul_pred, rul_base, SOH_TRUE, SOH_PRED, SOH_BASE = [], [], [], [], [], []
-    for i in range(test_fea.shape[0] // batch_size + 1):
+
+    total_iterations = test_fea.shape[0] // batch_size + 1
+    for i in tqdm(range(total_iterations), desc="Processing", unit="batch"):
 
         test_fea_ = test_fea[i*batch_size: i*batch_size+batch_size].transpose(0,3,2,1)
         test_lbl_ = test_lbl[i*batch_size: i*batch_size+batch_size]
@@ -199,7 +200,7 @@ for name in new_test[:]:
         _, y_pred, _, _, soh_pred = trainer.test(test_loader, model)
         rul_base.append(y_pred.cpu().detach().numpy())
         SOH_BASE.append(soh_pred.cpu().detach().numpy())
-        print(f'test_time:{time.time()-tic}')
+        tqdm.write(f'test_time:{time.time()-tic}')
 
         for p in model.soh.parameters():
             p.requires_grad = False
@@ -215,7 +216,7 @@ for name in new_test[:]:
         trainer = FineTrainer(lr = 1e-4, n_epochs = num_epochs,device = device, patience = 1000,
                       lamda = lamda, train_alpha = train_alpha, valid_alpha = valid_alpha, model_name=finetune_model_path)
         model ,train_loss, valid_loss, total_loss, added_loss = trainer.train(test_loader, test_loader, model)
-        print(f'finetuning_time:{time.time()-tic}')
+        tqdm.write(f'finetuning_time:{time.time()-tic}')
 
         y_true, y_pred, mse_loss, soh_true, soh_pred = trainer.test(test_loader, model)
         rul_true.append(y_true.cpu().detach().numpy().reshape(-1,1))
