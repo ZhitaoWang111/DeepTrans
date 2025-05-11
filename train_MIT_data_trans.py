@@ -23,6 +23,7 @@ from torch import nn
 from torch.autograd import Variable
 from torch.utils.data import DataLoader, Dataset, Sampler, TensorDataset
 from torch.utils.data.sampler import RandomSampler
+from transformer import BatteryLifeTransformer
     
 plt.rcParams['font.sans-serif'] = ['SimHei']
 plt.rcParams['axes.unicode_minus'] = False
@@ -136,15 +137,14 @@ alpha = torch.Tensor([0.1] * 10 )
 
 seed_torch(0)
 device = 'cuda'
-model = CRNN(100,4,64,64,sigmoid=True)
+model =  BatteryLifeTransformer()
 model = model.to(device)
-board_dir = '../ckpt/MIT/runs'
+board_dir = '../ckpt/MIT_trans/runs'
 
 num_epochs = 200
 trainer = Trainer(lr = 8e-4, n_epochs = num_epochs,device = device, patience = 1600,
-                  lamda = lamda, alpha = alpha, model_name='../ckpt/MIT/mit_pretrain', board_dir=board_dir)
+                  lamda = lamda, alpha = alpha, model_name='../ckpt/MIT_trans/mit_pretrain', board_dir=board_dir)
 model ,train_loss, valid_loss, total_loss = trainer.train(train_loader, valid_loader, model)
-
 
 
 lamda = 0.0
@@ -153,8 +153,8 @@ valid_weight9 = [0. if (i!=0) else 0.1 for i in train_weight9]
 train_alpha = torch.Tensor(train_weight9 + [0.] )
 valid_alpha = torch.Tensor(valid_weight9 + [0.])
 
-pretrain_model_path = '../ckpt/MIT/mit_pretrain_best.pt'
-finetune_model_path = '../ckpt/MIT/mit_finetune'
+pretrain_model_path = '../ckpt/MIT_trans/mit_pretrain_best.pt'
+finetune_model_path = '../ckpt/MIT_trans/mit_finetune'
 
 res_dict = {}
 
@@ -181,7 +181,7 @@ for name in new_test[:]:
         test_loader = DataLoader(testset, batch_size=batch_size,)
         if test_fea_.shape[0] == 0: continue
 
-        model = CRNN(100,4,64,64,sigmoid=True)
+        model =  BatteryLifeTransformer()
         model = model.to(device)
         model.load_state_dict(torch.load(pretrain_model_path))
 
@@ -189,14 +189,11 @@ for name in new_test[:]:
         rul_base.append(y_pred.cpu().detach().numpy())
         SOH_BASE.append(soh_pred.cpu().detach().numpy())
 
-        for p in model.soh.parameters():
-            p.requires_grad = False
-        for p in model.rul.parameters():
-            p.requires_grad = False
-        for p in model.cnn.parameters():
+        for p in model.feature_extractor.parameters():
             p.requires_grad = False
 
         seed_torch(2021)
+
         num_epochs = 100
         trainer = FineTrainer(lr = 1e-4, n_epochs = num_epochs,device = device, patience = 1000,
                       lamda = lamda, train_alpha = train_alpha, valid_alpha = valid_alpha, model_name=finetune_model_path, board_dir=board_dir)
@@ -230,4 +227,4 @@ for name in new_test[:]:
                             }
                     })
     print(f'完成：{name}')
-save_obj(res_dict,'./result/mit_result')
+save_obj(res_dict,'../result/mit_trans_result')

@@ -146,11 +146,12 @@ seed_torch(0)
 device = 'cuda'
 model = CRNN(100,4,64,64)
 model = model.to(device)
+board_dir = '../ckpt/HUST/runs'
 
 num_epochs = 200
 
 trainer = Trainer(lr = 8e-4, n_epochs = num_epochs,device = device, patience = 1200,
-                  lamda = lamda, alpha = alpha, model_name='./ckpt/HUST/wx_inner_pretrain')
+                  lamda = lamda, alpha = alpha, model_name='../ckpt/HUST/HUST_pretrain', board_dir=board_dir)
 model ,train_loss, valid_loss, total_loss = trainer.train(train_loader, valid_loader, model)
 
 print(f'pretrain_time:{time.time()-tic}')
@@ -164,8 +165,8 @@ train_alpha = torch.Tensor(train_weight9 + [0.] )
 valid_alpha = torch.Tensor(valid_weight9 + [0.])
 device = 'cuda'
 
-pretrain_model_path = './ckpt/HUST/wx_inner_pretrain_end.pt'
-finetune_model_path = './ckpt/HUST/wx_inner_finetune'
+pretrain_model_path = '../ckpt/HUST/HUST_pretrain_end.pt'
+finetune_model_path = '../ckpt/HUST/HUST_finetune'
 
 res_dict = {}
 
@@ -200,7 +201,6 @@ for name in new_test[:]:
         _, y_pred, _, _, soh_pred = trainer.test(test_loader, model)
         rul_base.append(y_pred.cpu().detach().numpy())
         SOH_BASE.append(soh_pred.cpu().detach().numpy())
-        tqdm.write(f'test_time:{time.time()-tic}')
 
         for p in model.soh.parameters():
             p.requires_grad = False
@@ -209,12 +209,11 @@ for name in new_test[:]:
         for p in model.cnn.parameters():
             p.requires_grad = False
 
-        tic = time.time()
         seed_torch(2021)
 
         num_epochs = 120
         trainer = FineTrainer(lr = 1e-4, n_epochs = num_epochs,device = device, patience = 1000,
-                      lamda = lamda, train_alpha = train_alpha, valid_alpha = valid_alpha, model_name=finetune_model_path)
+                      lamda = lamda, train_alpha = train_alpha, valid_alpha = valid_alpha, model_name=finetune_model_path, board_dir=board_dir)
         model ,train_loss, valid_loss, total_loss, added_loss = trainer.train(test_loader, test_loader, model)
         tqdm.write(f'finetuning_time:{time.time()-tic}')
 
@@ -245,7 +244,4 @@ for name in new_test[:]:
         },
                           }})
     
-save_obj(res_dict,'./result/res_dict')
-
-
-print('no problem')
+save_obj(res_dict,'../result/HUST_result')

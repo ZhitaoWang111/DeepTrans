@@ -3,6 +3,7 @@ import time
 import pickle
 import math
 import random
+from tqdm import tqdm
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.pyplot import MultipleLocator
@@ -23,83 +24,86 @@ from torch import nn
 from torch.autograd import Variable
 from torch.utils.data import DataLoader, Dataset, Sampler, TensorDataset
 from torch.utils.data.sampler import RandomSampler
-    
+
+from config import config
+from transformer import BatteryLifeTransformer
+
+hairlab_data = config.hairlab_data
+
+# 解决中文和负号显示问题
 plt.rcParams['font.sans-serif'] = ['SimHei']
 plt.rcParams['axes.unicode_minus'] = False
 
 import warnings
 warnings.filterwarnings('ignore')
 
-n_cyc = 100
-in_stride = 10
-fea_num = 100
 
-v_low = 3.36
-v_upp = 3.60
-q_low = 610
-q_upp = 1190
-rul_factor = 3000
-cap_factor = 1190
 
-new_test  = ['9-6','4-5','1-2', '10-7','1-1', '6-1','6-6', '9-4','10-4','8-5', '5-3','10-6',
-            '2-5','6-2','3-1','8-8', '8-1','8-6','7-6','6-8','7-5','10-1']
+### data preparation ###
+
+n_cyc = 30          # 循环数
+in_stride = 3       # 间隔数
+fea_num = 100       # 插值特征数
+
+v_low = 3.36        # 电压最小值
+v_upp = 3.60        # 电压最大值
+q_low = 610         # 容量最小值 mAh
+q_upp = 1190        # 容量最大值
+rul_factor = 3000   # 寿命归一化因子 （假设最大寿命循环数）
+cap_factor = 1190   # 容量归一化因子
+
+
+# pkl_list = os.listdir(hairlab_data)
+# pkl_list = sorted(pkl_list, key=lambda x:int(x.split('-')[0])*10 + int(x[-5]))
+
+# train_name = []
+# for name in pkl_list:
+#     train_name.append(name[:-4])
+
+# all_loader = dict()
+# print('----init_train----')
+# for name in train_name:
+#     tmp_fea, tmp_lbl = get_xy(name, n_cyc, in_stride, fea_num, v_low, v_upp, q_low, q_upp, rul_factor, cap_factor)
+#     all_loader.update({name:{'fea':tmp_fea,'lbl':tmp_lbl}})
+
+# loader_path = os.path.join('D:/wzt/bishe_data/data/HUST_cycle_dataloader/', 'all_loader.pkl')
+# with open(loader_path, 'wb') as f:
+#     pickle.dump(all_loader, f)
+# print('save over')
+
 
 loader_path  = 'D:/wzt/bishe_data/data/HUST_cycle_dataloader/all_loader.pkl'
 with open(loader_path, 'rb') as file:
     all_loader = pickle.load(file)
 
-ign_bat = ['b25','b33','a0','a1','a2','a3','a4','b22','b24','b26','b38','b44','c25','c43','c44']
-train_fea = load_obj('D:/wzt/bishe_data/data/MIT_data/fea_train')
-train_lbl = load_obj('D:/wzt/bishe_data/data/MIT_data/label_train')
-ne_train_name = list(train_fea.keys())
+### data loader ###
 
-valid_fea = load_obj('D:/wzt/bishe_data/data/MIT_data/fea_test')
-valid_lbl = load_obj('D:/wzt/bishe_data/data/MIT_data/label_test')
-ne_valid_name = list(valid_fea.keys())
+new_valid = ['4-3', '5-7', '3-3', '2-3', '9-3', '10-5', '3-2', '3-7']
+new_train = ['9-1', '2-2', '4-7','9-7', '1-8','4-6','2-7','8-4', '7-2','10-3', '2-4', '7-4', '3-4',
+            '5-4', '8-7','7-7', '4-4','1-3', '7-1','5-2', '6-4', '9-8','9-5','6-3','10-8','1-6','3-5',
+             '2-6', '3-8', '3-6', '4-8', '7-8','5-1', '2-8', '8-2','1-5','7-3', '10-2','5-5', '9-2','5-6', '1-7', 
+             '8-3', '4-1','4-2','1-4','6-5', ]
+new_test  = ['9-6','4-5','1-2', '10-7','1-1', '6-1','6-6', '9-4','10-4','8-5', '5-3','10-6',
+            '2-5','6-2','3-1','8-8', '8-1','8-6','7-6','6-8','7-5','10-1']
 
-test_fea = load_obj('D:/wzt/bishe_data/data/MIT_data/fea_sec')
-test_lbl = load_obj('D:/wzt/bishe_data/data/MIT_data/label_sec')
-ne_test_name = list(test_fea.keys())
-
-for name in ne_train_name:
-    tmp_fea, tmp_lbl = train_fea.get(name), train_lbl.get(name)
-    all_loader.update({name:{'fea':tmp_fea,'lbl':tmp_lbl}})
-    
-for name in ne_valid_name:
-    tmp_fea, tmp_lbl = valid_fea.get(name), valid_lbl.get(name)
-    all_loader.update({name:{'fea':tmp_fea,'lbl':tmp_lbl}})
-    
-for name in ne_test_name:
-    tmp_fea, tmp_lbl = test_fea.get(name), test_lbl.get(name)
-    all_loader.update({name:{'fea':tmp_fea,'lbl':tmp_lbl}})
-    
-for nm in list(all_loader.keys()):
-    del_rows = []
-    tmp_fea = all_loader[nm]['fea']
-    tmp_lbl = all_loader[nm]['lbl']
-    for i in range(1,11):
-        del_rows += list(np.where(np.abs(np.diff(tmp_lbl[:,i])) > 0.05)[0])
-    tmp_fea = np.delete(tmp_fea, del_rows, axis=0)
-    tmp_lbl = np.delete(tmp_lbl, del_rows, axis=0)
-    all_loader.update({nm:{'fea':tmp_fea,'lbl':tmp_lbl}})
-
+# new_valid = ['4-3', '5-7',]
+# new_train = ['9-1', '2-2', '4-7','9-7', '1-8','4-6', ]
+# new_test  = ['9-6','4-5','1-2', '10-7',]
 
 stride = 10
 train_fea, train_lbl = [], []
-for name in ne_train_name + ne_test_name:
-    if name in ign_bat:continue
+for name in new_train + new_valid:
     tmp_fea, tmp_lbl = all_loader[name]['fea'],all_loader[name]['lbl']
     tmp_fea_reversed = tmp_fea[::-1]
     train_fea.append(tmp_fea_reversed[::stride][::-1])
     tmp_lbl_reversed = tmp_lbl[::-1]
     train_lbl.append(tmp_lbl_reversed[::stride][::-1])
-train_fea = np.vstack(train_fea)
-train_lbl = np.vstack(train_lbl).squeeze()
+train_fea = np.vstack(train_fea)        # len = 55 (10279, 10, 100, 4)  <-- (55, n, 10, 100, 4)
+train_lbl = np.vstack(train_lbl).squeeze() # (10279, 11) <-- 
 
 stride = 10
 valid_fea, valid_lbl = [], []
-for name in ne_valid_name:
-    if name in ign_bat:continue
+for name in new_test:
     tmp_fea, tmp_lbl = all_loader[name]['fea'],all_loader[name]['lbl']
     tmp_fea_reversed = tmp_fea[::-1]
     valid_fea.append(tmp_fea_reversed[::stride][::-1])
@@ -108,7 +112,7 @@ for name in ne_valid_name:
 valid_fea = np.vstack(valid_fea)
 valid_lbl = np.vstack(valid_lbl).squeeze()
 
-print(train_fea.shape, train_lbl.shape, valid_fea.shape, valid_lbl.shape)
+# print(train_fea.shape, train_lbl.shape, valid_fea.shape, valid_lbl.shape)
 
 seed_torch(0)
 batch_size = 256
@@ -116,8 +120,8 @@ batch_size = 256
 train_fea_ = train_fea[:].copy()
 train_lbl_ = train_lbl[:].copy()
 
-train_fea_ = train_fea_.transpose(0,3,2,1)
-valid_fea_ = valid_fea.transpose(0,3,2,1)
+train_fea_ = train_fea_.transpose(0,3,2,1)      # (10279, 4, 100, 10)
+valid_fea_ = valid_fea.transpose(0,3,2,1)       # (4074, 4, 100, 10)
 
 trainset = TensorDataset(torch.Tensor(train_fea_), torch.Tensor(train_lbl_))
 validset = TensorDataset(torch.Tensor(valid_fea_), torch.Tensor(valid_lbl))
@@ -127,34 +131,43 @@ valid_loader = DataLoader(validset, batch_size=batch_size,)
 
 train_loader_t = DataLoader(trainset, batch_size=batch_size,shuffle=False)
 
+
+### model pre-training ###
+
 '''
 lamda (float): The weight of RUL loss
 alpha (List: [float]): The weights of Capacity loss
-'''         
+'''      
+
 lamda = 1e-2
 alpha = torch.Tensor([0.1] * 10 )
 
+tic = time.time()
 seed_torch(0)
 device = 'cuda'
-model = CRNN(100,4,64,64,sigmoid=True)
+model =  BatteryLifeTransformer()
 model = model.to(device)
-board_dir = '../ckpt/MIT/runs'
+board_dir = '../ckpt/HUST_trans/runs'
 
 num_epochs = 200
-trainer = Trainer(lr = 8e-4, n_epochs = num_epochs,device = device, patience = 1600,
-                  lamda = lamda, alpha = alpha, model_name='../ckpt/MIT/mit_pretrain', board_dir=board_dir)
+
+trainer = Trainer(lr = 8e-4, n_epochs = num_epochs,device = device, patience = 1200,
+                  lamda = lamda, alpha = alpha, model_name='../ckpt/HUST_trans/HUST_transformer_pretrain', board_dir=board_dir)
 model ,train_loss, valid_loss, total_loss = trainer.train(train_loader, valid_loader, model)
 
+print(f'pretrain_time:{time.time()-tic}')
 
+### online transfer ###
 
 lamda = 0.0
-train_weight9 = [0.1] * 9
+train_weight9 = [0., 0.1, 0., 0., 0.1, 0., 0., 0., 0.,]
 valid_weight9 = [0. if (i!=0) else 0.1 for i in train_weight9]
 train_alpha = torch.Tensor(train_weight9 + [0.] )
 valid_alpha = torch.Tensor(valid_weight9 + [0.])
+device = 'cuda'
 
-pretrain_model_path = '../ckpt/MIT/mit_pretrain_best.pt'
-finetune_model_path = '../ckpt/MIT/mit_finetune'
+pretrain_model_path = '../ckpt/HUST_trans/HUST_transformer_pretrain_end.pt'
+finetune_model_path = '../ckpt/HUST_trans/HUST_transformer_finetune'
 
 res_dict = {}
 
@@ -162,7 +175,6 @@ for name in new_test[:]:
 
     stride = 1
     test_fea, test_lbl = [], []
-    if name in ign_bat: print('wrong bat')
     tmp_fea, tmp_lbl = all_loader[name]['fea'],all_loader[name]['lbl']
     tmp_fea_reversed = tmp_fea[::-1]
     test_fea.append(tmp_fea_reversed[::stride][::-1])
@@ -173,6 +185,7 @@ for name in new_test[:]:
 
     batch_size = 20 if len(test_fea)%20!=1 else 21
     rul_true, rul_pred, rul_base, SOH_TRUE, SOH_PRED, SOH_BASE = [], [], [], [], [], []
+
     for i in range(test_fea.shape[0] // batch_size + 1):
 
         test_fea_ = test_fea[i*batch_size: i*batch_size+batch_size].transpose(0,3,2,1)
@@ -181,7 +194,7 @@ for name in new_test[:]:
         test_loader = DataLoader(testset, batch_size=batch_size,)
         if test_fea_.shape[0] == 0: continue
 
-        model = CRNN(100,4,64,64,sigmoid=True)
+        model =  BatteryLifeTransformer()
         model = model.to(device)
         model.load_state_dict(torch.load(pretrain_model_path))
 
@@ -189,15 +202,11 @@ for name in new_test[:]:
         rul_base.append(y_pred.cpu().detach().numpy())
         SOH_BASE.append(soh_pred.cpu().detach().numpy())
 
-        for p in model.soh.parameters():
-            p.requires_grad = False
-        for p in model.rul.parameters():
-            p.requires_grad = False
-        for p in model.cnn.parameters():
+        for p in model.feature_extractor.parameters():
             p.requires_grad = False
 
         seed_torch(2021)
-        num_epochs = 100
+        num_epochs = 120
         trainer = FineTrainer(lr = 1e-4, n_epochs = num_epochs,device = device, patience = 1000,
                       lamda = lamda, train_alpha = train_alpha, valid_alpha = valid_alpha, model_name=finetune_model_path, board_dir=board_dir)
         model ,train_loss, valid_loss, total_loss, added_loss = trainer.train(test_loader, test_loader, model)
@@ -227,7 +236,6 @@ for name in new_test[:]:
             'base':SOH_BASE[:,9]*cap_factor,
             'transfer':SOH_PRED[:,9]*cap_factor,
         },
-                            }
-                    })
+                          }})
     print(f'完成：{name}')
-save_obj(res_dict,'./result/mit_result')
+save_obj(res_dict,'../result/HUST_trans_result')

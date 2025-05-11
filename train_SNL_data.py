@@ -119,11 +119,12 @@ seed_torch(0)
 device = 'cuda'
 model = CRNN(100,4,64,64,sigmoid=True)
 model = model.to(device)
+board_dir = '../ckpt/SNL/runs'
 
 num_epochs = 100
 trainer = Trainer(lr = 8e-4, n_epochs = num_epochs,device = device, patience = 1200,
-                  lamda = lamda, alpha = alpha, model_name='../ckpt/nmc_pretrain')
-model ,train_loss, valid_loss, total_loss = trainer.train(train_loader, valid_loader, model)
+                  lamda = lamda, alpha = alpha, model_name='../ckpt/SNL/nmc_pretrain')
+model ,train_loss, valid_loss, total_loss = trainer.train(train_loader, valid_loader, model, board_dir=board_dir)
 
 print(time.time()-tic)
 
@@ -133,8 +134,8 @@ valid_weight9 = [0. if (i!=0) else 0.1 for i in train_weight9]
 train_alpha = torch.Tensor(train_weight9 + [0.] )
 valid_alpha = torch.Tensor(valid_weight9 + [0.])
 
-pretrain_model_path = '../ckpt/nmc_pretrain_best.pt'
-finetune_model_path = '../ckpt/nmc_finetune'
+pretrain_model_path = '../ckpt/SNL/nmc_pretrain_best.pt'
+finetune_model_path = '../ckpt/SNL/nmc_finetune'
 
 
 res_dict = {}
@@ -144,8 +145,10 @@ for name in new_test[:]:
     stride = 1
     test_fea, test_lbl = [], []
     tmp_fea, tmp_lbl = all_loader[name]['fea'],all_loader[name]['lbl']
-    test_fea.append(tmp_fea[::stride])
-    test_lbl.append(tmp_lbl[::stride])
+    tmp_fea_reversed = tmp_fea[::-1]
+    test_fea.append(tmp_fea_reversed[::stride][::-1])
+    tmp_lbl_reversed = tmp_lbl[::-1]
+    test_lbl.append(tmp_lbl_reversed[::stride][::-1])
     test_fea = np.vstack(test_fea)
     test_lbl = np.vstack(test_lbl).squeeze()
 
@@ -179,7 +182,7 @@ for name in new_test[:]:
 
         num_epochs = 50
         trainer = FineTrainer(lr = 2e-4, n_epochs = num_epochs,device = device, patience = 1000,
-                      lamda = lamda, train_alpha = train_alpha, valid_alpha = valid_alpha, model_name=finetune_model_path)
+                      lamda = lamda, train_alpha = train_alpha, valid_alpha = valid_alpha, model_name=finetune_model_path, board_dir=board_dir)
         model ,train_loss, valid_loss, total_loss, added_loss = trainer.train(test_loader, test_loader, model)
 
         y_true, y_pred, mse_loss, soh_true, soh_pred = trainer.test(test_loader, model)
@@ -211,4 +214,3 @@ for name in new_test[:]:
     print(f'完成：{name}')
 save_obj(res_dict,'../result/snl_result')
 
-print('over')

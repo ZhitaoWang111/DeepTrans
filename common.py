@@ -134,7 +134,7 @@ def get_xy(name, n_cyc, in_stride, fea_num, v_low, v_upp, q_low, q_upp, rul_fact
 
 class Trainer():
     
-    def __init__(self, lr, n_epochs,device, patience, lamda, alpha, model_name):
+    def __init__(self, lr, n_epochs,device, patience, lamda, alpha, model_name, board_dir):
         """
         Args:
             lr (float): Learning rate
@@ -152,7 +152,8 @@ class Trainer():
         self.model_name = model_name
         self.lamda = lamda
         self.alpha = alpha
-        self.writer = SummaryWriter(log_dir='../ckpt/HUST/runs/pre-training')
+        board_dir = os.path.join(board_dir, 'pre-training')
+        self.writer = SummaryWriter(log_dir=board_dir)
 
     def train(self, train_loader, valid_loader, model):
         model = model.to(self.device)
@@ -170,7 +171,7 @@ class Trainer():
         train_loss = []
         valid_loss = []
         total_loss = []
-        
+        epoch_start = time.time()
         for epoch in range(self.n_epochs):
             model.train()
             y_true, y_pred = [], []
@@ -229,6 +230,8 @@ class Trainer():
                 if (epoch % 100 == 0 and epoch !=0):
                     print('Epoch number : ', epoch)
                     print(f'-- "train" loss {train_loss[-1]:.4}', f'-- "valid" loss {epoch_loss:.4}',f'-- "total" loss {losses:.4}')
+                    epoch_end = time.time()
+                    print(f'100次epoch耗时: {epoch_end-epoch_start}s')
             else :
                 print(f'-- "train" loss {train_loss[-1]:.4}', f'-- "valid" loss {epoch_loss:.4}',f'-- "total" loss {losses:.4}')
 
@@ -269,7 +272,7 @@ class Trainer():
 
 class FineTrainer():
     
-    def __init__(self, lr, n_epochs,device, patience, lamda, train_alpha, valid_alpha, model_name):
+    def __init__(self, lr, n_epochs,device, patience, lamda, train_alpha, valid_alpha, model_name, board_dir):
         """
         Args:
             lr (float): Learning rate
@@ -289,7 +292,8 @@ class FineTrainer():
         self.lamda = lamda
         self.train_alpha = train_alpha
         self.valid_alpha = valid_alpha
-        self.writer = SummaryWriter(log_dir='../ckpt/HUST/runs/fune-tuning')
+        board_dir = os.path.join(board_dir, 'fune-tuning')
+        self.writer = SummaryWriter(log_dir=board_dir)
 
     def train(self, train_loader, valid_loader, model):
         model = model.to(self.device)

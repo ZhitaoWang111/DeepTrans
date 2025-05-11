@@ -23,6 +23,7 @@ from torch import nn
 from torch.autograd import Variable
 from torch.utils.data import DataLoader, Dataset, Sampler, TensorDataset
 from torch.utils.data.sampler import RandomSampler
+from transformer import BatteryLifeTransformer
     
 plt.rcParams['font.sans-serif'] = ['SimHei']
 plt.rcParams['axes.unicode_minus'] = False
@@ -30,64 +31,45 @@ plt.rcParams['axes.unicode_minus'] = False
 import warnings
 warnings.filterwarnings('ignore')
 
-n_cyc = 100
-in_stride = 10
+n_cyc = 30
+in_stride = 3
 fea_num = 100
 
 v_low = 3.36
 v_upp = 3.60
 q_low = 610
 q_upp = 1190
-rul_factor = 3000
+rul_factor = 2700
 cap_factor = 1190
+ne_lbl_factor = 2500
+nmc_rul_factor = 2000
+nmc_cap_factor = 2.9
 
 new_test  = ['9-6','4-5','1-2', '10-7','1-1', '6-1','6-6', '9-4','10-4','8-5', '5-3','10-6',
             '2-5','6-2','3-1','8-8', '8-1','8-6','7-6','6-8','7-5','10-1']
 
-loader_path  = 'D:/wzt/bishe_data/data/HUST_cycle_dataloader/all_loader.pkl'
-with open(loader_path, 'rb') as file:
+all_loader_path  = 'D:/wzt/bishe_data/data/HUST_cycle_dataloader/all_loader.pkl'
+with open(all_loader_path, 'rb') as file:
     all_loader = pickle.load(file)
 
-ign_bat = ['b25','b33','a0','a1','a2','a3','a4','b22','b24','b26','b38','b44','c25','c43','c44']
-train_fea = load_obj('D:/wzt/bishe_data/data/MIT_data/fea_train')
-train_lbl = load_obj('D:/wzt/bishe_data/data/MIT_data/label_train')
-ne_train_name = list(train_fea.keys())
+snl_nmc_loader_path  = 'D:/wzt/bishe_data/data/SNL_NMC_dataloader/nmc_loader.pkl'
+with open(snl_nmc_loader_path, 'rb') as file:
+    snl_nmc_loader = pickle.load(file)
 
-valid_fea = load_obj('D:/wzt/bishe_data/data/MIT_data/fea_test')
-valid_lbl = load_obj('D:/wzt/bishe_data/data/MIT_data/label_test')
-ne_valid_name = list(valid_fea.keys())
+all_loader.update(snl_nmc_loader)
 
-test_fea = load_obj('D:/wzt/bishe_data/data/MIT_data/fea_sec')
-test_lbl = load_obj('D:/wzt/bishe_data/data/MIT_data/label_sec')
-ne_test_name = list(test_fea.keys())
+nmc_train_name = ['SNL_18650_NMC_15C_0-100_0.5-2C_a', 'SNL_18650_NMC_15C_0-100_0.5-2C_b', 'SNL_18650_NMC_15C_0-100_0.5-1C_b',
+                  'SNL_18650_NMC_25C_0-100_0.5-3C_c', 'SNL_18650_NMC_25C_0-100_0.5-3C_a', 'SNL_18650_NMC_35C_0-100_0.5-2C_a',
+                  'SNL_18650_NMC_35C_0-100_0.5-2C_b', 'SNL_18650_NMC_25C_0-100_0.5-3C_d', 'SNL_18650_NMC_25C_0-100_0.5-2C_a',
+                  'SNL_18650_NMC_25C_0-100_0.5-1C_d', 'SNL_18650_NMC_35C_0-100_0.5-1C_a', 'SNL_18650_NMC_35C_0-100_0.5-1C_c',
+                  'SNL_18650_NMC_25C_0-100_0.5-1C_a', 'SNL_18650_NMC_25C_0-100_0.5-2C_b', 'SNL_18650_NMC_35C_0-100_0.5-1C_d',
+                  'SNL_18650_NMC_25C_0-100_0.5-3C_b', 'SNL_18650_NMC_25C_0-100_0.5-1C_b', 'SNL_18650_NMC_25C_0-100_0.5-1C_c',
+                  'SNL_18650_NMC_25C_0-100_0.5-0.5C_a']
+nmc_valid_name = ['SNL_18650_NMC_15C_0-100_0.5-1C_a', 'SNL_18650_NMC_35C_0-100_0.5-1C_b', 'SNL_18650_NMC_25C_0-100_0.5-0.5C_b']
 
-for name in ne_train_name:
-    tmp_fea, tmp_lbl = train_fea.get(name), train_lbl.get(name)
-    all_loader.update({name:{'fea':tmp_fea,'lbl':tmp_lbl}})
-    
-for name in ne_valid_name:
-    tmp_fea, tmp_lbl = valid_fea.get(name), valid_lbl.get(name)
-    all_loader.update({name:{'fea':tmp_fea,'lbl':tmp_lbl}})
-    
-for name in ne_test_name:
-    tmp_fea, tmp_lbl = test_fea.get(name), test_lbl.get(name)
-    all_loader.update({name:{'fea':tmp_fea,'lbl':tmp_lbl}})
-    
-for nm in list(all_loader.keys()):
-    del_rows = []
-    tmp_fea = all_loader[nm]['fea']
-    tmp_lbl = all_loader[nm]['lbl']
-    for i in range(1,11):
-        del_rows += list(np.where(np.abs(np.diff(tmp_lbl[:,i])) > 0.05)[0])
-    tmp_fea = np.delete(tmp_fea, del_rows, axis=0)
-    tmp_lbl = np.delete(tmp_lbl, del_rows, axis=0)
-    all_loader.update({nm:{'fea':tmp_fea,'lbl':tmp_lbl}})
-
-
-stride = 10
+stride = 1
 train_fea, train_lbl = [], []
-for name in ne_train_name + ne_test_name:
-    if name in ign_bat:continue
+for name in nmc_train_name:
     tmp_fea, tmp_lbl = all_loader[name]['fea'],all_loader[name]['lbl']
     tmp_fea_reversed = tmp_fea[::-1]
     train_fea.append(tmp_fea_reversed[::stride][::-1])
@@ -96,10 +78,9 @@ for name in ne_train_name + ne_test_name:
 train_fea = np.vstack(train_fea)
 train_lbl = np.vstack(train_lbl).squeeze()
 
-stride = 10
+stride = 1
 valid_fea, valid_lbl = [], []
-for name in ne_valid_name:
-    if name in ign_bat:continue
+for name in nmc_valid_name:
     tmp_fea, tmp_lbl = all_loader[name]['fea'],all_loader[name]['lbl']
     tmp_fea_reversed = tmp_fea[::-1]
     valid_fea.append(tmp_fea_reversed[::stride][::-1])
@@ -136,15 +117,14 @@ alpha = torch.Tensor([0.1] * 10 )
 
 seed_torch(0)
 device = 'cuda'
-model = CRNN(100,4,64,64,sigmoid=True)
+model =  BatteryLifeTransformer()
 model = model.to(device)
-board_dir = '../ckpt/MIT/runs'
+board_dir = '../ckpt/SNL_trans/runs'
 
-num_epochs = 200
-trainer = Trainer(lr = 8e-4, n_epochs = num_epochs,device = device, patience = 1600,
-                  lamda = lamda, alpha = alpha, model_name='../ckpt/MIT/mit_pretrain', board_dir=board_dir)
+num_epochs = 100
+trainer = Trainer(lr = 8e-4, n_epochs = num_epochs,device = device, patience = 1200,
+                  lamda = lamda, alpha = alpha, model_name='../ckpt/SNL_trans/nmc_pretrain', board_dir=board_dir)
 model ,train_loss, valid_loss, total_loss = trainer.train(train_loader, valid_loader, model)
-
 
 
 lamda = 0.0
@@ -153,8 +133,9 @@ valid_weight9 = [0. if (i!=0) else 0.1 for i in train_weight9]
 train_alpha = torch.Tensor(train_weight9 + [0.] )
 valid_alpha = torch.Tensor(valid_weight9 + [0.])
 
-pretrain_model_path = '../ckpt/MIT/mit_pretrain_best.pt'
-finetune_model_path = '../ckpt/MIT/mit_finetune'
+pretrain_model_path = '../ckpt/SNL_trans/nmc_pretrain_best.pt'
+finetune_model_path = '../ckpt/SNL_trans/nmc_finetune'
+
 
 res_dict = {}
 
@@ -162,7 +143,6 @@ for name in new_test[:]:
 
     stride = 1
     test_fea, test_lbl = [], []
-    if name in ign_bat: print('wrong bat')
     tmp_fea, tmp_lbl = all_loader[name]['fea'],all_loader[name]['lbl']
     tmp_fea_reversed = tmp_fea[::-1]
     test_fea.append(tmp_fea_reversed[::stride][::-1])
@@ -171,17 +151,17 @@ for name in new_test[:]:
     test_fea = np.vstack(test_fea)
     test_lbl = np.vstack(test_lbl).squeeze()
 
-    batch_size = 20 if len(test_fea)%20!=1 else 21
+    batch_size = 10 if len(test_fea)%10!=1 else 11
     rul_true, rul_pred, rul_base, SOH_TRUE, SOH_PRED, SOH_BASE = [], [], [], [], [], []
     for i in range(test_fea.shape[0] // batch_size + 1):
 
-        test_fea_ = test_fea[i*batch_size: i*batch_size+batch_size].transpose(0,3,2,1)
-        test_lbl_ = test_lbl[i*batch_size: i*batch_size+batch_size]
+        test_fea_ = test_fea[i*batch_size:i*batch_size+batch_size].transpose(0,3,2,1)
+        test_lbl_ = test_lbl[i*batch_size:i*batch_size+batch_size]
         testset = TensorDataset(torch.Tensor(test_fea_), torch.Tensor(test_lbl_))
         test_loader = DataLoader(testset, batch_size=batch_size,)
         if test_fea_.shape[0] == 0: continue
 
-        model = CRNN(100,4,64,64,sigmoid=True)
+        model =  BatteryLifeTransformer()
         model = model.to(device)
         model.load_state_dict(torch.load(pretrain_model_path))
 
@@ -189,16 +169,12 @@ for name in new_test[:]:
         rul_base.append(y_pred.cpu().detach().numpy())
         SOH_BASE.append(soh_pred.cpu().detach().numpy())
 
-        for p in model.soh.parameters():
-            p.requires_grad = False
-        for p in model.rul.parameters():
-            p.requires_grad = False
-        for p in model.cnn.parameters():
+        for p in model.feature_extractor.parameters():
             p.requires_grad = False
 
         seed_torch(2021)
-        num_epochs = 100
-        trainer = FineTrainer(lr = 1e-4, n_epochs = num_epochs,device = device, patience = 1000,
+        num_epochs = 50
+        trainer = FineTrainer(lr = 2e-4, n_epochs = num_epochs,device = device, patience = 1000,
                       lamda = lamda, train_alpha = train_alpha, valid_alpha = valid_alpha, model_name=finetune_model_path, board_dir=board_dir)
         model ,train_loss, valid_loss, total_loss, added_loss = trainer.train(test_loader, test_loader, model)
 
@@ -214,7 +190,6 @@ for name in new_test[:]:
     SOH_TRUE = np.vstack(SOH_TRUE)
     SOH_PRED = np.vstack(SOH_PRED)
     SOH_BASE = np.vstack(SOH_BASE)
-
     
     res_dict.update({name:{
         'rul':{
@@ -227,7 +202,9 @@ for name in new_test[:]:
             'base':SOH_BASE[:,9]*cap_factor,
             'transfer':SOH_PRED[:,9]*cap_factor,
         },
-                            }
+                          }
                     })
     print(f'完成：{name}')
-save_obj(res_dict,'./result/mit_result')
+save_obj(res_dict,'../result/snl_trans_result')
+
+print('over')
