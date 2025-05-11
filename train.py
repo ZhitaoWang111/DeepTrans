@@ -94,7 +94,7 @@ train_fea, train_lbl = [], []
 for name in new_train + new_valid:
     tmp_fea, tmp_lbl = all_loader[name]['fea'],all_loader[name]['lbl']
     tmp_fea_reversed = tmp_fea[::-1]
-    train_fea.append(tmp_fea_reversed[::stride][::-1])     # 指定步长间隔采样
+    train_fea.append(tmp_fea_reversed[::stride][::-1])
     tmp_lbl_reversed = tmp_lbl[::-1]
     train_lbl.append(tmp_lbl_reversed[::stride][::-1])
 train_fea = np.vstack(train_fea)        # len = 55 (10279, 10, 100, 4)  <-- (55, n, 10, 100, 4)

@@ -341,8 +341,8 @@ class FineTrainer():
             losses = np.mean(losses)
             total_loss.append(losses)
 
-            self.writer.add_scalar('train_Loss', losses, epoch)
-            self.writer.add_scalar('train_mse_Loss', epoch_loss, epoch)
+            self.writer.add_scalar('fine-tuing_train_Loss', losses, epoch)
+            self.writer.add_scalar('fine-tuing_train_mse_Loss', epoch_loss, epoch)
 
             # validate
             model.eval()
@@ -366,7 +366,7 @@ class FineTrainer():
             epoch_loss = mean_squared_error(y_true.cpu().detach().numpy(), y_pred.cpu().detach().numpy())
             valid_loss.append(epoch_loss)
 
-            self.writer.add_scalar('valid_mse_Loss', epoch_loss, epoch)
+            self.writer.add_scalar('fine-tuing_valid_mse_Loss', epoch_loss, epoch)
             
             temp = 0
             for i in range(all_true.shape[1]):
