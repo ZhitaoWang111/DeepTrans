@@ -152,7 +152,7 @@ class Trainer():
         self.model_name = model_name
         self.lamda = lamda
         self.alpha = alpha
-        self.writer = SummaryWriter(log_dir='./ckpt/HUST/runs/pre-training')
+        self.writer = SummaryWriter(log_dir='../ckpt/HUST/runs/pre-training')
 
     def train(self, train_loader, valid_loader, model):
         model = model.to(self.device)
@@ -238,6 +238,8 @@ class Trainer():
                     break
 
         torch.save(model.state_dict(), f'{model_name}_end.pt')
+        if not early_stopping.early_stop:
+            torch.save(model.state_dict(), f'{model_name}_best.pt')
         return model, train_loss, valid_loss, total_loss
 
     def test(self, test_loader, model):
@@ -287,7 +289,7 @@ class FineTrainer():
         self.lamda = lamda
         self.train_alpha = train_alpha
         self.valid_alpha = valid_alpha
-        self.writer = SummaryWriter(log_dir='./ckpt/HUST/runs/fune-tuning')
+        self.writer = SummaryWriter(log_dir='../ckpt/HUST/runs/fune-tuning')
 
     def train(self, train_loader, valid_loader, model):
         model = model.to(self.device)
@@ -388,6 +390,8 @@ class FineTrainer():
                 break
                 
         torch.save(model.state_dict(), f'{model_name}_fine_end.pt')
+        if not early_stopping.early_stop:
+            torch.save(model.state_dict(), f'{model_name}_fine_best.pt')
         return model, train_loss, valid_loss, total_loss, added_loss
 
     def test(self, test_loader, model):
